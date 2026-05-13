@@ -204,6 +204,35 @@ function GalleryPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [viewingIdx, showPrev, showNext]);
 
+  // Anclar controles del viewer al visualViewport para que NO escalen con pinch-zoom
+  const [vv, setVv] = useState({ x: 0, y: 0, w: 0, h: 0, scale: 1 });
+  useEffect(() => {
+    if (viewingIdx === null) return;
+    const vp = window.visualViewport;
+    if (!vp) return;
+    const update = () => setVv({
+      x: vp.offsetLeft, y: vp.offsetTop,
+      w: vp.width, h: vp.height, scale: vp.scale,
+    });
+    update();
+    vp.addEventListener("resize", update);
+    vp.addEventListener("scroll", update);
+    return () => {
+      vp.removeEventListener("resize", update);
+      vp.removeEventListener("scroll", update);
+    };
+  }, [viewingIdx]);
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    left: vv.x,
+    top: vv.y,
+    width: vv.w,
+    height: vv.h,
+    transform: `scale(${1 / (vv.scale || 1)})`,
+    transformOrigin: "top left",
+    pointerEvents: "none",
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/auth" });
@@ -348,45 +377,48 @@ function GalleryPage() {
       {/* Fullscreen viewer with fixed controls */}
       {viewing && (
         <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm">
-          {/* Top bar — fixed */}
-          <div className="fixed top-0 inset-x-0 z-50 flex justify-between items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
-            <Button variant="secondary" size="sm" onClick={() => setViewingIdx(null)}>
-              <X className="size-4 mr-2" /> Volver
-            </Button>
-            <span className="text-white/80 text-sm font-medium">
-              {(viewingIdx ?? 0) + 1} / {sorted.length}
-            </span>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => handleDownload(viewing)}>
-                <Download className="size-4 sm:mr-2" />
-                <span className="hidden sm:inline">Descargar</span>
+          {/* Controles anclados al visualViewport (no escalan con pinch-zoom) */}
+          <div style={overlayStyle} className="z-50">
+            <div className="absolute top-0 inset-x-0 flex justify-between items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent" style={{ pointerEvents: "auto" }}>
+              <Button variant="secondary" size="sm" onClick={() => setViewingIdx(null)}>
+                <X className="size-4 mr-2" /> Volver
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleDelete(viewing)}>
-                <Trash2 className="size-4 sm:mr-2" />
-                <span className="hidden sm:inline">Eliminar</span>
-              </Button>
+              <span className="text-white/80 text-sm font-medium">
+                {(viewingIdx ?? 0) + 1} / {sorted.length}
+              </span>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => handleDownload(viewing)}>
+                  <Download className="size-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Descargar</span>
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => handleDelete(viewing)}>
+                  <Trash2 className="size-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Eliminar</span>
+                </Button>
+              </div>
             </div>
-          </div>
 
-          {/* Prev / Next — fixed */}
-          {sorted.length > 1 && (
-            <>
-              <button
-                onClick={showPrev}
-                aria-label="Anterior"
-                className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 z-50 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
-              >
-                <ChevronLeft className="size-6" />
-              </button>
-              <button
-                onClick={showNext}
-                aria-label="Siguiente"
-                className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-50 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
-              >
-                <ChevronRight className="size-6" />
-              </button>
-            </>
-          )}
+            {sorted.length > 1 && (
+              <>
+                <button
+                  onClick={showPrev}
+                  aria-label="Anterior"
+                  style={{ pointerEvents: "auto" }}
+                  className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
+                >
+                  <ChevronLeft className="size-6" />
+                </button>
+                <button
+                  onClick={showNext}
+                  aria-label="Siguiente"
+                  style={{ pointerEvents: "auto" }}
+                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
+                >
+                  <ChevronRight className="size-6" />
+                </button>
+              </>
+            )}
+          </div>
 
           {/* Image */}
           <div className="absolute inset-0 flex items-center justify-center p-4 pt-20 pb-16">
