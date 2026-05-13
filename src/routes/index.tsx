@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import {
-  LogOut, Upload, Trash2, ImageIcon, ArrowUpDown,
+  LogOut, Upload, Trash2, ImageIcon,
   X, Download, ArrowDownAZ, ArrowUpAZ,
+  CheckSquare, Square, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import palmIcon from "@/assets/palm.png";
 
@@ -46,7 +47,9 @@ function GalleryPage() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sortDesc, setSortDesc] = useState(true);
-  const [viewing, setViewing] = useState<Photo | null>(null);
+  const [viewingIdx, setViewingIdx] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -94,6 +97,8 @@ function GalleryPage() {
     return arr;
   }, [photos, sortDesc]);
 
+  const viewing = viewingIdx !== null ? sorted[viewingIdx] : null;
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -128,15 +133,39 @@ function GalleryPage() {
     }
   };
 
+  const removePhotos = async (list: Photo[]) => {
+    const paths = list.map((p) => p.storage_path);
+    const ids = list.map((p) => p.id);
+    const { error: sErr } = await supabase.storage.from("photos").remove(paths);
+    if (sErr) return toast.error(sErr.message);
+    const { error: dErr } = await supabase.from("photos").delete().in("id", ids);
+    if (dErr) return toast.error(dErr.message);
+    setPhotos((ps) => ps.filter((p) => !ids.includes(p.id)));
+    toast.success(list.length > 1 ? `${list.length} fotos eliminadas` : "Foto eliminada");
+  };
+
   const handleDelete = async (photo: Photo) => {
     if (!confirm("¿Eliminar esta foto?")) return;
-    const { error: sErr } = await supabase.storage.from("photos").remove([photo.storage_path]);
-    if (sErr) return toast.error(sErr.message);
-    const { error: dErr } = await supabase.from("photos").delete().eq("id", photo.id);
-    if (dErr) return toast.error(dErr.message);
-    toast.success("Foto eliminada");
-    setPhotos((ps) => ps.filter((p) => p.id !== photo.id));
-    if (viewing?.id === photo.id) setViewing(null);
+    await removePhotos([photo]);
+    if (viewing?.id === photo.id) setViewingIdx(null);
+  };
+
+  const handleBulkDelete = async () => {
+    const list = photos.filter((p) => selected.has(p.id));
+    if (list.length === 0) return;
+    if (!confirm(`¿Eliminar ${list.length} foto(s)?`)) return;
+    await removePhotos(list);
+    setSelected(new Set());
+    setSelectMode(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   };
 
   const handleDownload = async (photo: Photo) => {
@@ -156,6 +185,24 @@ function GalleryPage() {
       toast.error("No se pudo descargar");
     }
   };
+
+  const showPrev = useCallback(() => {
+    setViewingIdx((i) => (i === null ? null : (i - 1 + sorted.length) % sorted.length));
+  }, [sorted.length]);
+  const showNext = useCallback(() => {
+    setViewingIdx((i) => (i === null ? null : (i + 1) % sorted.length));
+  }, [sorted.length]);
+
+  useEffect(() => {
+    if (viewingIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") showPrev();
+      else if (e.key === "ArrowRight") showNext();
+      else if (e.key === "Escape") setViewingIdx(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewingIdx, showPrev, showNext]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -185,9 +232,17 @@ function GalleryPage() {
               onClick={() => setSortDesc((s) => !s)}
               title={sortDesc ? "Más nuevas primero" : "Más viejas primero"}
             >
-              {sortDesc ? <ArrowDownAZ className="size-4 mr-2" /> : <ArrowUpAZ className="size-4 mr-2" />}
-              <span className="hidden sm:inline">{sortDesc ? "Recientes" : "Antiguas"}</span>
-              <ArrowUpDown className="size-4 ml-1 sm:hidden" />
+              {sortDesc ? <ArrowDownAZ className="size-4" /> : <ArrowUpAZ className="size-4" />}
+              <span className="hidden sm:inline ml-2">{sortDesc ? "Recientes" : "Antiguas"}</span>
+            </Button>
+            <Button
+              variant={selectMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setSelectMode((m) => !m); setSelected(new Set()); }}
+              title="Seleccionar varias"
+            >
+              {selectMode ? <CheckSquare className="size-4" /> : <Square className="size-4" />}
+              <span className="hidden sm:inline ml-2">Seleccionar</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="size-4 sm:mr-2" />
@@ -201,7 +256,12 @@ function GalleryPage() {
         <Card className="p-5 mb-6 bg-card/80 backdrop-blur">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Hola, <span className="text-foreground font-medium">{username}</span></p>
+              <p className="text-sm text-muted-foreground">
+                Hola, <span className="text-foreground font-medium">{username}</span>
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                  <ImageIcon className="size-3" /> {photos.length}
+                </span>
+              </p>
               <div className="mt-2 flex items-center gap-3">
                 <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                   <div
@@ -214,7 +274,13 @@ function GalleryPage() {
                 </span>
               </div>
             </div>
-            <div>
+            <div className="flex gap-2">
+              {selectMode && selected.size > 0 && (
+                <Button variant="destructive" onClick={handleBulkDelete}>
+                  <Trash2 className="size-4 mr-2" />
+                  Eliminar ({selected.size})
+                </Button>
+              )}
               <Input
                 ref={fileInput}
                 type="file"
@@ -226,7 +292,6 @@ function GalleryPage() {
               <Button
                 onClick={() => fileInput.current?.click()}
                 disabled={uploading}
-                className="w-full sm:w-auto"
               >
                 <Upload className="size-4 mr-2" />
                 {uploading ? "Subiendo…" : "Subir foto"}
@@ -244,36 +309,53 @@ function GalleryPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {sorted.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setViewing(p)}
-                className="group relative aspect-square overflow-hidden rounded-xl bg-muted shadow-sm hover:shadow-blue transition-all hover:-translate-y-0.5"
-              >
-                {p.url && (
-                  <img
-                    src={p.url}
-                    alt={p.title ?? "Foto"}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
-                  />
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-xs text-white truncate text-left">{p.title}</p>
-                </div>
-              </button>
-            ))}
+            {sorted.map((p, idx) => {
+              const isSel = selected.has(p.id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    if (selectMode) toggleSelect(p.id);
+                    else setViewingIdx(idx);
+                  }}
+                  className={`group relative aspect-square overflow-hidden rounded-xl bg-muted shadow-sm hover:shadow-blue transition-all hover:-translate-y-0.5 ${
+                    isSel ? "ring-4 ring-primary" : ""
+                  }`}
+                >
+                  {p.url && (
+                    <img
+                      src={p.url}
+                      alt={p.title ?? "Foto"}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  )}
+                  {selectMode && (
+                    <div className="absolute top-2 right-2 size-6 rounded-md bg-background/90 flex items-center justify-center">
+                      {isSel ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-xs text-white truncate text-left">{p.title}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </main>
 
-      {/* Fullscreen viewer with page-flip animation */}
+      {/* Fullscreen viewer with fixed controls */}
       {viewing && (
-        <div className="fixed inset-0 z-40 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="absolute top-4 left-4 right-4 flex justify-between gap-2 z-10">
-            <Button variant="secondary" size="sm" onClick={() => setViewing(null)}>
+        <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm">
+          {/* Top bar — fixed */}
+          <div className="fixed top-0 inset-x-0 z-50 flex justify-between items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
+            <Button variant="secondary" size="sm" onClick={() => setViewingIdx(null)}>
               <X className="size-4 mr-2" /> Volver
             </Button>
+            <span className="text-white/80 text-sm font-medium">
+              {(viewingIdx ?? 0) + 1} / {sorted.length}
+            </span>
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={() => handleDownload(viewing)}>
                 <Download className="size-4 sm:mr-2" />
@@ -285,17 +367,41 @@ function GalleryPage() {
               </Button>
             </div>
           </div>
-          <div key={viewing.id} className="animate-page-flip max-w-5xl max-h-[85vh] w-full">
-            {viewing.url && (
-              <img
-                src={viewing.url}
-                alt={viewing.title ?? "Foto"}
-                className="w-full h-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-              />
-            )}
-            {viewing.title && (
-              <p className="text-center text-white/80 text-sm mt-3">{viewing.title}</p>
-            )}
+
+          {/* Prev / Next — fixed */}
+          {sorted.length > 1 && (
+            <>
+              <button
+                onClick={showPrev}
+                aria-label="Anterior"
+                className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 z-50 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
+              >
+                <ChevronLeft className="size-6" />
+              </button>
+              <button
+                onClick={showNext}
+                aria-label="Siguiente"
+                className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-50 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
+              >
+                <ChevronRight className="size-6" />
+              </button>
+            </>
+          )}
+
+          {/* Image */}
+          <div className="absolute inset-0 flex items-center justify-center p-4 pt-20 pb-16">
+            <div key={viewing.id} className="animate-page-flip max-w-5xl w-full h-full flex flex-col items-center justify-center">
+              {viewing.url && (
+                <img
+                  src={viewing.url}
+                  alt={viewing.title ?? "Foto"}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                />
+              )}
+              {viewing.title && (
+                <p className="text-center text-white/80 text-sm mt-3">{viewing.title}</p>
+              )}
+            </div>
           </div>
         </div>
       )}
