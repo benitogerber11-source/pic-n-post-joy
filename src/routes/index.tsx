@@ -204,6 +204,35 @@ function GalleryPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [viewingIdx, showPrev, showNext]);
 
+  // Anclar controles del viewer al visualViewport para que NO escalen con pinch-zoom
+  const [vv, setVv] = useState({ x: 0, y: 0, w: 0, h: 0, scale: 1 });
+  useEffect(() => {
+    if (viewingIdx === null) return;
+    const vp = window.visualViewport;
+    if (!vp) return;
+    const update = () => setVv({
+      x: vp.offsetLeft, y: vp.offsetTop,
+      w: vp.width, h: vp.height, scale: vp.scale,
+    });
+    update();
+    vp.addEventListener("resize", update);
+    vp.addEventListener("scroll", update);
+    return () => {
+      vp.removeEventListener("resize", update);
+      vp.removeEventListener("scroll", update);
+    };
+  }, [viewingIdx]);
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    left: vv.x,
+    top: vv.y,
+    width: vv.w,
+    height: vv.h,
+    transform: `scale(${1 / (vv.scale || 1)})`,
+    transformOrigin: "top left",
+    pointerEvents: "none",
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/auth" });
