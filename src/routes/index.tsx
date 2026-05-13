@@ -370,67 +370,80 @@ function GalleryPage() {
         )}
       </main>
 
-      {/* Fullscreen viewer with fixed controls */}
+      {/* Fullscreen viewer: solo la imagen hace zoom; los controles quedan fijos */}
       {viewing && (
-        <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm">
-          {/* Controles anclados al visualViewport (no escalan con pinch-zoom) */}
-          <div style={overlayStyle} className="z-50">
-            <div className="absolute top-0 inset-x-0 flex justify-between items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent" style={{ pointerEvents: "auto" }}>
-              <Button variant="secondary" size="sm" onClick={() => setViewingIdx(null)}>
-                <X className="size-4 mr-2" /> Volver
-              </Button>
-              <span className="text-white/80 text-sm font-medium">
-                {(viewingIdx ?? 0) + 1} / {sorted.length}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => handleDownload(viewing)}>
-                  <Download className="size-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Descargar</span>
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => handleDelete(viewing)}>
-                  <Trash2 className="size-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Eliminar</span>
-                </Button>
+        <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm overflow-hidden">
+          {/* Imagen con zoom/pan independiente */}
+          <TransformWrapper
+            key={viewing.id}
+            initialScale={1}
+            minScale={1}
+            maxScale={5}
+            doubleClick={{ mode: "toggle" }}
+            wheel={{ step: 0.2 }}
+            pinch={{ step: 5 }}
+          >
+            <TransformComponent
+              wrapperStyle={{ width: "100%", height: "100%" }}
+              contentStyle={{ width: "100%", height: "100%" }}
+            >
+              <div className="w-screen h-screen flex items-center justify-center p-4">
+                {viewing.url && (
+                  <img
+                    src={viewing.url}
+                    alt={viewing.title ?? "Foto"}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-page-flip select-none"
+                    draggable={false}
+                  />
+                )}
               </div>
-            </div>
+            </TransformComponent>
+          </TransformWrapper>
 
-            {sorted.length > 1 && (
-              <>
-                <button
-                  onClick={showPrev}
-                  aria-label="Anterior"
-                  style={{ pointerEvents: "auto" }}
-                  className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
-                >
-                  <ChevronLeft className="size-6" />
-                </button>
-                <button
-                  onClick={showNext}
-                  aria-label="Siguiente"
-                  style={{ pointerEvents: "auto" }}
-                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition"
-                >
-                  <ChevronRight className="size-6" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Image */}
-          <div className="absolute inset-0 flex items-center justify-center p-4 pt-20 pb-16">
-            <div key={viewing.id} className="animate-page-flip max-w-5xl w-full h-full flex flex-col items-center justify-center">
-              {viewing.url && (
-                <img
-                  src={viewing.url}
-                  alt={viewing.title ?? "Foto"}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                />
-              )}
-              {viewing.title && (
-                <p className="text-center text-white/80 text-sm mt-3">{viewing.title}</p>
-              )}
+          {/* Controles fijos - no escalan con el zoom de la imagen */}
+          <div className="fixed top-0 inset-x-0 flex justify-between items-center gap-2 p-4 bg-gradient-to-b from-black/70 to-transparent z-50">
+            <Button variant="secondary" size="sm" onClick={() => setViewingIdx(null)}>
+              <X className="size-4 mr-2" /> Volver
+            </Button>
+            <span className="text-white/90 text-sm font-medium">
+              {(viewingIdx ?? 0) + 1} / {sorted.length}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => handleDownload(viewing)}>
+                <Download className="size-4 sm:mr-2" />
+                <span className="hidden sm:inline">Descargar</span>
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => handleDelete(viewing)}>
+                <Trash2 className="size-4 sm:mr-2" />
+                <span className="hidden sm:inline">Eliminar</span>
+              </Button>
             </div>
           </div>
+
+          {sorted.length > 1 && (
+            <>
+              <button
+                onClick={showPrev}
+                aria-label="Anterior"
+                className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition z-50"
+              >
+                <ChevronLeft className="size-6" />
+              </button>
+              <button
+                onClick={showNext}
+                aria-label="Siguiente"
+                className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 size-12 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur text-white flex items-center justify-center transition z-50"
+              >
+                <ChevronRight className="size-6" />
+              </button>
+            </>
+          )}
+
+          {viewing.title && (
+            <p className="fixed bottom-3 inset-x-0 text-center text-white/80 text-sm z-50 px-4 truncate">
+              {viewing.title}
+            </p>
+          )}
         </div>
       )}
     </div>
