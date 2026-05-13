@@ -11,6 +11,7 @@ import {
   X, Download, ArrowDownAZ, ArrowUpAZ,
   CheckSquare, Square, ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import palmIcon from "@/assets/palm.png";
 
 export const Route = createFileRoute("/")({
